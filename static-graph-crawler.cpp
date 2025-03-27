@@ -17,7 +17,13 @@ https://en.cppreference.com/w/cpp/container/vector (Reviewing std::vector docume
 https://www.geeksforgeeks.org/cpp-strcat/ (Overview of the strcat function.)
 https://www.geeksforgeeks.org/how-to-convert-std-string-to-char-in-cpp/ (How to cast std::string to a const char*)
 https://medium.com/@abhishekjainindore24/mutex-in-c-threads-part-1-45aeac3ab62d (Article reviewing threads and mutexes.)
+https://www.geeksforgeeks.org/segmentation-fault-c-cpp/ (Segfault review.)
+https://rapidjson.org/group___r_a_p_i_d_j_s_o_n___e_r_r_o_r_s.html#gga7d3acf640886b1f2552dc8c4cd6dea60ab707b848425668e765def25554735242 (Going through rapidjson error codes.)
+
 ------------*/
+
+// FOR SUBMISSION: Only need to print output runtimes.
+// Probably print params and output time.
 
 // TODO: Have output actually work.
       // Implement threading.
@@ -56,7 +62,7 @@ int main (int argc, char* argv[])
     const char* domain = "http://hollywood-graph-crawler.bridgesuncc.org/neighbors/";
 
     // Getting the starting node.
-    std::string start = strdup(argv[1]);;
+    std::string start = strdup(argv[1]);
 
     // Creating all the level arrays.
     for (int i = 0; i < max_level; i++)
@@ -72,63 +78,91 @@ int main (int argc, char* argv[])
     std::vector<std::string> zero_level = visited_levels.at(0);
     zero_level.push_back(start);
 
+    // Assign the new changes back to the visited levels vector.
+    visited_levels.at(0) = zero_level;
+
     // Run until the level exceeds the max_level - 1.
     // Adding minus 1 so the last child nodes do not exceed the traversal length.
     while (level <= max_level - 1) 
     {
+        // Mutex creation and locking the code to prevent race conditions.
+        // Using lock_guard for proper RAII and automatic locking/unlocking.
+        std::mutex mtx;
+        std::lock_guard<std::mutex> lock(mtx);
+        
         // Create a new curl object.
         CURL *curl = curl_easy_init();
+
+        // Check to see if curl was created correctly.
+        if (!curl)
+        {
+            std::cout << "Error allocating curl.  Exiting function" << "\n";
+            return 1;
+        }
         
-        // Getting the current 
+        // Getting the current level.
         std::vector<std::string> curr_level = visited_levels.at(level);
+        std::cout<<"current level size: " << curr_level.size() << "\n";
 
         while (curr_level.size() != 0)
         {
-            // Mutex creation and locking the code to prevent race conditions.
-            // Using lock_guard for proper RAII and automatic locking/unlocking.
-            std::mutex mtx;
-            std::lock_guard<std::mutex> lock(mtx);
-
             // Get the front node that needs to be visited.
             const char* temp = curr_level.front().c_str();
-            
+
             // Erase the temp node from to visit and add it to done visiting vector.
             curr_level.erase(curr_level.begin());
             done_visiting.push_back(temp);
 
             // Append the temp string to the domain.
-            const char* temp_esc = curl_easy_escape(curl, temp, 0);
-            char* final_dom = strcat( (char*) domain, temp_esc);
-
+            char* temp_esc = curl_easy_escape(curl, temp, 0);
+            char final_domain[256];
+            strcpy(final_domain, domain);
+            char* final_url = strcat(final_domain, temp_esc);
+            std::cout<<final_url<<"\n";
             // Set the options for running the specified node.
-            curl_easy_setopt(curl, CURLOPT_URL, final_dom);
-            
-            // Gather the output.
-            std::string* output;
-            // Set up data and function options.
-            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &output);
-            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, print_data);
+            curl_easy_setopt(curl, CURLOPT_URL, final_url);
 
+            // Gather the output.
+            std::string output;
+            
+            // Set up data and function options.
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&output);     // Need to cast to void* due to CURLOPT_WRITEDATA
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, print_data);
+            
             // Performing the curl.
             curl_easy_perform(curl);
 
+            // Freeing the temp_esc call.
+            curl_free(temp_esc);
+            
             // Taking in the rapidjson data.
             using namespace rapidjson;
             Document doc;
-            doc.Parse(output->c_str());
+            doc.Parse(output.c_str());
 
             // Ensure the json object was parsed correctly.
-            if (doc.GetParseError() != 0 && !doc.HasMember("neighbors") && !doc.IsObject())
+            // Why does this NOT work?
+            if (doc.GetParseError() != 0)
+            {
+                std::cout << "Parsing error with code " << doc.GetParseError()<<"\n";
+                return 1;
+            }
+
+            // Validate the doc is an object and has a member called neighbors.
+            // How does this function work?
+            if (!doc.IsObject() || !doc.HasMember("neighbors"))
             {
                 continue;
             }
 
-            // Create and validate the children iterator.
+            // Create and validate the children array.
             Value& children = doc["neighbors"];
             if (!children.IsArray())
             {
                 continue;
             }
+
+            std::cout<<"Child size: "<<children.Size()<<"\n";
 
             // Iterating through the children/neighbors.
             for (auto& iter : children.GetArray())
@@ -142,21 +176,23 @@ int main (int argc, char* argv[])
                         break;
                     }
 
-                    else {
+                    else {  //delete-later
                         std::cout << children.Begin() << "\n";
                     }
                 }
-                
+            }
 
                 // After duplicates have been removed, add to the apporiate level vector.
                 std::vector<std::string> next_level = visited_levels.at(level + 1);
-                next_level.push_back(iter.GetString());
+
+                for (auto& adding : children.GetArray())
+                {
+                    next_level.push_back(adding.GetString());
+                }
+                
                 // Assign the new vector back at its old position.
                 visited_levels.at(level + 1) = next_level;
-                // Add to the visited vector.
-                done_visiting.push_back(iter.GetString());
-            }
-
+        
         }
 
         // Deallocate the curl variable.
@@ -177,4 +213,5 @@ int main (int argc, char* argv[])
             std::cout << std::string(printer) << "\n";
         }
     }
+
 }
