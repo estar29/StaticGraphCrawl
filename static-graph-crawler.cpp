@@ -19,7 +19,6 @@ https://www.geeksforgeeks.org/how-to-convert-std-string-to-char-in-cpp/ (How to 
 https://medium.com/@abhishekjainindore24/mutex-in-c-threads-part-1-45aeac3ab62d (Article reviewing threads and mutexes.)
 https://www.geeksforgeeks.org/segmentation-fault-c-cpp/ (Segfault review.)
 https://rapidjson.org/group___r_a_p_i_d_j_s_o_n___e_r_r_o_r_s.html#gga7d3acf640886b1f2552dc8c4cd6dea60ab707b848425668e765def25554735242 (Going through rapidjson error codes.)
-
 ------------*/
 
 // FOR SUBMISSION: Only need to print output runtimes.
@@ -52,8 +51,8 @@ size_t print_data(char *buffer, size_t size, size_t nmemb, void *user_par)
 int main (int argc, char* argv[])
 {
     // Initialize vectors that hold visited nodes for each level.
-    std::vector<std::string> done_visiting;
-    std::vector<std::vector<std::string>> visited_levels;
+    std::vector<char*> done_visiting;
+    std::vector<std::vector<char*> > visited_levels;
     int level = 0;
     // Getting the level limit.
     int max_level = std::atoi(argv[2]);
@@ -62,12 +61,12 @@ int main (int argc, char* argv[])
     const char* domain = "http://hollywood-graph-crawler.bridgesuncc.org/neighbors/";
 
     // Getting the starting node.
-    std::string start = strdup(argv[1]);
+    char* start = strdup(argv[1]);
 
     // Creating all the level arrays.
     for (int i = 0; i < max_level; i++)
     {
-        std::vector<std::string> new_lvl;
+        std::vector<char*> new_lvl;
         visited_levels.push_back(new_lvl);
     }
 
@@ -75,7 +74,7 @@ int main (int argc, char* argv[])
 
     // Push the initial case to the level 0 vector.
     // Should be the only node at level 0.
-    std::vector<std::string> zero_level = visited_levels.at(0);
+    std::vector<char*> zero_level = visited_levels.at(0);
     zero_level.push_back(start);
 
     // Assign the new changes back to the visited levels vector.
@@ -101,13 +100,13 @@ int main (int argc, char* argv[])
         }
         
         // Getting the current level.
-        std::vector<std::string> curr_level = visited_levels.at(level);
+        std::vector<char*> curr_level = visited_levels.at(level);
         std::cout<<"current level size: " << curr_level.size() << "\n";
 
         while (curr_level.size() != 0)
         {
             // Get the front node that needs to be visited.
-            const char* temp = curr_level.front().c_str();
+            char* temp = curr_level.front();
 
             // Erase the temp node from to visit and add it to done visiting vector.
             curr_level.erase(curr_level.begin());
@@ -117,24 +116,22 @@ int main (int argc, char* argv[])
             char* temp_esc = curl_easy_escape(curl, temp, 0);
             char final_domain[256];
             strcpy(final_domain, domain);
-            char* final_url = strcat(final_domain, temp_esc);
-            std::cout<<final_url<<"\n";
+            strcat(final_domain, temp_esc);
             // Set the options for running the specified node.
-            curl_easy_setopt(curl, CURLOPT_URL, final_url);
+            curl_easy_setopt(curl, CURLOPT_URL, final_domain);
+
+            std::cout<<final_domain<<"\n";
 
             // Gather the output.
-            std::string output;
-            
+            std::string output;     // Using std::string as shown in the libcurl tutorial video.
             // Set up data and function options.
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&output);     // Need to cast to void* due to CURLOPT_WRITEDATA
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, print_data);
-            
             // Performing the curl.
             curl_easy_perform(curl);
-
             // Freeing the temp_esc call.
             curl_free(temp_esc);
-            
+
             // Taking in the rapidjson data.
             using namespace rapidjson;
             Document doc;
@@ -145,6 +142,7 @@ int main (int argc, char* argv[])
             if (doc.GetParseError() != 0)
             {
                 std::cout << "Parsing error with code " << doc.GetParseError()<<"\n";
+                std::cout << "position: " << doc.GetErrorOffset() <<"\n";
                 return 1;
             }
 
@@ -183,16 +181,15 @@ int main (int argc, char* argv[])
             }
 
                 // After duplicates have been removed, add to the apporiate level vector.
-                std::vector<std::string> next_level = visited_levels.at(level + 1);
+                std::vector<char*> next_level = visited_levels.at(level + 1);
 
                 for (auto& adding : children.GetArray())
                 {
-                    next_level.push_back(adding.GetString());
+                    next_level.push_back(strdup(adding.GetString() ) );
                 }
                 
                 // Assign the new vector back at its old position.
                 visited_levels.at(level + 1) = next_level;
-        
         }
 
         // Deallocate the curl variable.
@@ -205,7 +202,7 @@ int main (int argc, char* argv[])
     // Print the output
     for (int i = 0; i < visited_levels.size(); i++)
     {
-        std::vector<std::string> curr = visited_levels.at(i);
+        std::vector<char*> curr = visited_levels.at(i);
         std::cout << "LEVEL " << i << "\n";
 
         for (auto& printer : curr)
